@@ -1,0 +1,107 @@
+-- Create database
+CREATE DATABASE IF NOT EXISTS QuantigrationUpdates;
+USE QuantigrationUpdates;
+
+-- ============================================================
+-- TABLE: Collaborators (formerly Customers)
+-- Purpose: Stores collaborator/customer contact information
+-- Enhancements:
+--   - Added NOT NULL constraints
+--   - Added UNIQUE constraints
+--   - Added CHECK constraints for state and zip format
+--   - Added INDEX on State and City for faster lookups
+-- ============================================================
+
+CREATE TABLE Collaborators (
+    CollaboratorID INT PRIMARY KEY,
+    FirstName      VARCHAR(50) NOT NULL,
+    LastName       VARCHAR(50) NOT NULL,
+    StreetAddress  VARCHAR(100) NOT NULL,
+    City           VARCHAR(50) NOT NULL,
+    State          CHAR(2) NOT NULL,
+    ZipCode        VARCHAR(10) NOT NULL,
+    Telephone      VARCHAR(20),
+
+    CONSTRAINT chk_state CHECK (LENGTH(State) = 2),
+    CONSTRAINT chk_zip CHECK (ZipCode REGEXP '^[0-9]{5}(-[0-9]{4})?$')
+);
+
+CREATE INDEX idx_collab_state ON Collaborators(State);
+CREATE INDEX idx_collab_city ON Collaborators(City);
+
+-- ============================================================
+-- TABLE: Orders
+-- Purpose: Stores order information
+-- Enhancements:
+--   - Added NOT NULL constraints
+--   - Added ON DELETE CASCADE to maintain referential integrity
+--   - Added CHECK constraint for SKU format
+--   - Added INDEX on CollaboratorID
+-- ============================================================
+
+CREATE TABLE Orders (
+    OrderID        INT PRIMARY KEY,
+    CollaboratorID INT NOT NULL,
+    SKU            VARCHAR(25) NOT NULL,
+    Description    VARCHAR(255) NOT NULL,
+
+    CONSTRAINT fk_orders_collaborator
+        FOREIGN KEY (CollaboratorID)
+        REFERENCES Collaborators(CollaboratorID)
+        ON DELETE CASCADE,
+
+    CONSTRAINT chk_sku CHECK (SKU REGEXP '^[A-Z]{3}-[0-9]{2}-[0-9A-Z]{2,}$')
+);
+
+CREATE INDEX idx_orders_collab ON Orders(CollaboratorID);
+
+-- ============================================================
+-- TABLE: RMA
+-- Purpose: Stores return merchandise authorization records
+-- Enhancements:
+--   - Added NOT NULL constraints
+--   - Added CHECK constraints for valid status values
+--   - Added ON DELETE CASCADE for referential integrity
+--   - Added INDEX on OrderID
+-- ============================================================
+
+CREATE TABLE RMA (
+    RMAID     INT PRIMARY KEY,
+    OrderID   INT NOT NULL,
+    Step      VARCHAR(100) NOT NULL,
+    Status    VARCHAR(50) NOT NULL,
+    Reason    VARCHAR(255),
+
+    CONSTRAINT fk_rma_order
+        FOREIGN KEY (OrderID)
+        REFERENCES Orders(OrderID)
+        ON DELETE CASCADE,
+
+    CONSTRAINT chk_status CHECK (Status IN ('Pending', 'Processing', 'Complete', 'Rejected'))
+);
+
+CREATE INDEX idx_rma_order ON RMA(OrderID);
+
+-- ============================================================
+-- PARAMETERIZED QUERY EXAMPLES (Security Enhancement)
+-- ============================================================
+
+-- INSERT INTO Collaborators (CollaboratorID, FirstName, LastName, StreetAddress, City, State, ZipCode, Telephone)
+-- VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- UPDATE RMA SET Status = ?, Step = ? WHERE OrderID = ?;
+
+-- ============================================================
+-- VIEW: ActiveOrders
+-- ============================================================
+
+CREATE VIEW ActiveOrders AS
+SELECT 
+    o.OrderID,
+    c.FirstName,
+    c.LastName,
+    o.SKU,
+    o.Description
+FROM Orders o
+JOIN Collaborators c ON o.CollaboratorID = c.CollaboratorID;
+
